@@ -1,0 +1,219 @@
+<!doctype html>
+<html class="h-full">
+  <head>
+    <title>Hello World</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script
+      src="https://unpkg.com/alpinejs@3.14.8/dist/cdn.min.js"
+      defer
+    ></script>
+    <script src="https://unpkg.com/@tailwindcss/browser@4.0.12/dist/index.global.js"></script>
+    <script type="module">
+      import { fixWebmDuration } from "https://esm.sh/@fix-webm-duration/fix@1.0.1/es2022/fix.mjs";
+      window.fixWebmDuration = fixWebmDuration;
+    </script>
+  </head>
+  <body
+    class="h-full flex flex-col p-4 gap-4"
+    x-data="{
+      _src: '',
+      _duration: 0,
+      _currentTime: 0,
+      _playing: false,
+      _recording: false,
+      _recorder: null,
+      get src () {
+        return this._src
+      },
+      get duration () {
+        return this._duration
+      },
+      get currentTime () {
+        return this._currentTime
+      },
+      set currentTime (value) {
+        this.$refs.video.currentTime = value
+        this._currentTime = value
+      },
+      get playable () {
+        return this._src !== ''
+      },
+      get playing () {
+        return this._playing
+      },
+      set playing (value) {
+        this._playing = value
+        if (value) {
+          this.$refs.video.play()
+        } else {
+          this.$refs.video.pause()
+        }
+      },
+      get recording () {
+        return this._recording
+      },
+      set recording (value) {
+        this._recording = value
+        if (value) {
+          this._src = ''
+          this._duration = 0
+          this._currentTime = 0
+          this._playing = false
+          navigator.mediaDevices
+            .getDisplayMedia({
+              video: { frameRate: 30 },
+              audio: false
+            })
+            .then(stream => {
+              const start = Date.now()
+              const chunks = []
+              this._recorder = new MediaRecorder(stream, { mimeType: 'video/webm' })
+              this._recorder.ondataavailable = e => {
+                chunks.push(e.data)
+              }
+              this._recorder.onstop = () => {
+                this._recording = false
+                stream.getTracks()
+                  .forEach(track => track.stop())
+                fixWebmDuration(
+                  new Blob(chunks, { type: 'video/webm' }),
+                  Date.now() - start
+                ).then(blob => {
+                  this._src = URL.createObjectURL(blob)
+                })
+              }
+              this._recorder.start()
+            })
+            .catch(() => {
+              this._recording = false
+            })
+        } else {
+          this._recorder.stop()
+        }
+      },
+      download () {
+        Object.assign(
+          document.createElement('a'),
+          {
+            href: this._src,
+            download: `video_${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().substring(0, 16).replace(/[T:-]/g, '_')}.webm`
+          }
+        ).click()
+      },
+      formatTime (value) {
+        return `${Math.floor(value / 60)}:${(value % 60 | 0).toString().padStart(2, 0)}`
+      }
+    }"
+  >
+    <div class="grow rounded flex flex-col overflow-hidden">
+      <div class="bg-slate-700 grow text-white relative overflow-hidden">
+        <video
+          class="w-full h-full"
+          x-ref="video"
+          x-bind:src.prop="_src"
+          x-on:loadedmetadata="_duration = $el.duration"
+          x-on:timeupdate="_currentTime = $el.currentTime"
+          x-on:play="_playing = true"
+          x-on:paused="_playing = false"
+          x-on:ended="_playing = false"
+        ></video>
+        <div
+          class="absolute inset-0 flex items-center justify-center [[disabled]]:text-gray-400 cursor-pointer [[disabled]]:cursor-default"
+          x-on:click="if (playable) playing = !playing"
+          x-bind:disabled="!playable"
+        >
+          <svg
+            class="drop-shadow-lg"
+            xmlns="http://www.w3.org/2000/svg"
+            width="64"
+            height="64"
+            viewBox="0 0 24 24"
+            x-show="!playing"
+          >
+            <!-- Icon from Remix Icon by Remix Design - https://github.com/Remix-Design/RemixIcon/blob/master/License -->
+            <path
+              fill="currentColor"
+              d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10s-4.477 10-10 10M10.622 8.415a.4.4 0 0 0-.622.332v6.506a.4.4 0 0 0 .622.332l4.879-3.252a.4.4 0 0 0 0-.666z"
+            />
+          </svg>
+        </div>
+      </div>
+      <div class="bg-slate-500 flex items-center p-2 gap-2 text-sm">
+        <div
+          class="text-white [[disabled]]:text-gray-400"
+          x-bind:disabled="!playable"
+          x-text="formatTime(currentTime)"
+        ></div>
+        <input
+          class="grow appearance-none bg-slate-600 h-2 rounded cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded [&::-webkit-slider-thumb]:bg-white disabled:[&::-webkit-slider-thumb]:bg-gray-400 disabled:cursor-default"
+          type="range"
+          step="0.00001"
+          x-bind:disabled="!playable"
+          x-bind:max="duration"
+          x-model="currentTime"
+        />
+        <div
+          class="text-white [[disabled]]:text-gray-400"
+          x-bind:disabled="!playable"
+          x-text="formatTime(duration)"
+        ></div>
+      </div>
+    </div>
+    <div class="flex flex-col gap-2 shrink-0">
+      <button
+        class="cursor-pointer bg-slate-300 p-2 px-4 rounded font-bold tracking-wide flex gap-2 justify-center items-center"
+        x-on:click="recording = !recording"
+      >
+        <span class="contents" x-show="!recording"
+          ><svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+          >
+            <!-- Icon from Remix Icon by Remix Design - https://github.com/Remix-Design/RemixIcon/blob/master/License -->
+            <path
+              fill="currentColor"
+              d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2S2 6.477 2 12s4.477 10 10 10"
+            />
+          </svg>
+          Record
+        </span>
+        <span class="contents" x-show="recording">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+          >
+            <!-- Icon from Remix Icon by Remix Design - https://github.com/Remix-Design/RemixIcon/blob/master/License -->
+            <path
+              fill="currentColor"
+              d="M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1"
+            />
+          </svg>
+          Stop
+        </span>
+      </button>
+      <button
+        class="cursor-pointer bg-slate-200 p-2 px-4 rounded font-bold tracking-wide flex gap-2 justify-center items-center disabled:text-gray-400 disabled:bg-gray-100 disabled:cursor-default"
+        x-bind:disabled="!playable"
+        x-on:click="download"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+        >
+          <!-- Icon from Remix Icon by Remix Design - https://github.com/Remix-Design/RemixIcon/blob/master/License -->
+          <path
+            fill="currentColor"
+            d="M3 19h18v2H3zm10-5.828L19.071 7.1l1.414 1.414L12 17L3.515 8.515L4.929 7.1L11 13.173V2h2z"
+          />
+        </svg>
+        Download
+      </button>
+    </div>
+  </body>
+</html>
