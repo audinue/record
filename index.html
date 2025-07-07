@@ -67,7 +67,7 @@
             .then(stream => {
               const start = Date.now()
               const chunks = []
-              this._recorder = new MediaRecorder(stream, { mimeType: 'video/mp4' })
+              this._recorder = new MediaRecorder(stream, { mimeType: 'video/mp4; codecs="avc1.4d002a"' })
               this._recorder.ondataavailable = e => {
                 chunks.push(e.data)
               }
